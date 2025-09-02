@@ -2,15 +2,17 @@ import React from 'react'
 
 function Terminal({ output, terminal, setEditorOpen, setInput, input }) {
     return (
-        <div>
+        <div className='terminalContainer'>
             <button className='terminalCross' onClick={() => setEditorOpen(false)}>x</button>
-            <h3>Input</h3>
-            <textarea className='terminalOutput' id="" cols="30" rows="10" value={input} onChange={(e) => setInput(e.target.value)}></textarea>
+            <div className='terminalSection'>
+                <h3>Input</h3>
+                <textarea className='terminalInput' placeholder="Enter input for your program..." value={input} onChange={(e) => setInput(e.target.value)}></textarea>
+            </div>
             <hr />
-            <h3>Output</h3>
-            {
-                 <textarea value={output} readOnly="true" className='terminalOutput'></textarea>
-            }
+            <div className='terminalSection'>
+                <h3>Output</h3>
+                <textarea value={output} readOnly className='terminalOutput'></textarea>
+            </div>
         </div>
     )
 }

@@ -32,6 +32,7 @@ function EditorPage() {
   const [isRunning, setIsRunning] = useState(false);
   const [isMicEnabled, setIsMicEnabled] = useState(false);
   const [mediaStream, setMediaStream] = useState(null);
+  const [showTerminal, setShowTerminal] = useState(false);
   const handleChat = (e) => {
     e.preventDefault();
     setChatShown(true);
@@ -39,20 +40,40 @@ function EditorPage() {
   const [isTeacher, setIsTeacher] = useState(false);
   const { id } = useParams();
   const socketRef = useRef(null);
+  const toggleMicrophone = async () => {
+    try {
+      if (!isMicEnabled) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        setMediaStream(stream);
+        setIsMicEnabled(true);
+        toast.success('Microphone enabled');
+      } else {
+        if (mediaStream) {
+          mediaStream.getTracks().forEach(track => track.stop());
+          setMediaStream(null);
+        }
+        setIsMicEnabled(false);
+        toast.success('Microphone disabled');
+      }
+    } catch (error) {
+      toast.error('Microphone access denied');
+    }
+  };
+  
   useEffect(() => {
     const init = async () => {
       socketRef.current = await initSocket();
       socketRef.current.on('connect_error', (err) => handleerror(err));
       socketRef.current.on('connect_failed', (err) => handleerror(err));
       socketRef.current.on('disconnect', (reason) => {
-        if (reason === 'io server disconnect') {
-          toast.error('Server disconnected. Attempting to reconnect...');
-        }
+        console.log('Disconnected:', reason);
+        toast.error('Connection lost. Reconnecting...');
       });
       socketRef.current.on('reconnect', () => {
         toast.success('Reconnected to server!');
       });
       function handleerror(err) {
+        console.log('Connection error:', err);
         toast.error('Connection issue. Retrying...');
       }
       socketRef.current.emit(ACTIONS.JOIN, {
@@ -88,6 +109,10 @@ function EditorPage() {
       socketRef.current.disconnect();
       socketRef.current.off(ACTIONS.JOINED);
       socketRef.current.off(ACTIONS.DISCONNECTED);
+      // Cleanup microphone
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+      }
     }
   }, [])
   if (!location.state) {
@@ -140,24 +165,20 @@ function EditorPage() {
     element.click();
   };
   const runCode = async () => {
-    setTerminal(false);
-    setEditorOpen(true);
-    setOutput("Loading...")
+    setIsRunning(true);
+    setShowTerminal(true);
+    setOutput("Compiling and running code...");
+    
     if(liveCode === "") {
-      setOutput("Null output not allowed");
-      setTerminal(true);
+      setOutput("Error: No code to execute");
+      setIsRunning(false);
       return;
     }
+    
+    try {
     const encodedCode = btoa(liveCode);
     const inputNecode = btoa(input);
-    const options = {
-      method: 'GET',
-      url: 'https://judge0-ce.p.rapidapi.com/about',
-      headers: {
-        'X-RapidAPI-Key': `${process.env.REACT_APP_RAPID_API_KEY}`,
-        'X-RapidAPI-Host': 'judge0-ce.p.rapidapi.com'
-      }
-    };
+    
     const optionsPost = {
       method: 'POST',
       url: 'https://judge0-ce.p.rapidapi.com/submissions',
@@ -170,7 +191,14 @@ function EditorPage() {
       },
       data: `{"language_id":${Number(langCode)},"source_code":"${encodedCode}","stdin":"${inputNecode}"}`
     };
+    
     const resPost = await axios.request(optionsPost);
+    
+    // Poll for result
+    let attempts = 0;
+    const maxAttempts = 10;
+    
+    while (attempts < maxAttempts) {
     const optionsGet = {
       method: 'GET',
       url: `https://judge0-ce.p.rapidapi.com/submissions/${resPost.data.token}`,
@@ -180,15 +208,52 @@ function EditorPage() {
         'X-RapidAPI-Host': 'judge0-ce.p.rapidapi.com'
       }
     };
+    
     const res = (await axios.request(optionsGet)).data;
-    const output = (atob(res.stdout));
-    console.log(output);
-    if(res.stdout === null) setOutput(res.status.description)
-    else setOutput(atob(res.stdout));
-    setTerminal(true);
+    
+      if (res.status.id <= 2) {
+        // Still processing
+        setOutput(`Processing... (${attempts + 1}/${maxAttempts})`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        attempts++;
+        continue;
+      }
+      
+      // Execution completed
+      let finalOutput = '';
+      
+      if (res.stdout) {
+        finalOutput += `Output:\n${atob(res.stdout)}\n`;
+      }
+      
+      if (res.stderr) {
+        finalOutput += `Error:\n${atob(res.stderr)}\n`;
+      }
+      
+      if (res.compile_output) {
+        finalOutput += `Compilation Error:\n${atob(res.compile_output)}\n`;
+      }
+      
+      if (!res.stdout && !res.stderr && !res.compile_output) {
+        finalOutput = `Status: ${res.status.description}`;
+      }
+      
+      setOutput(finalOutput || 'No output');
+      break;
+    }
+    
+    if (attempts >= maxAttempts) {
+      setOutput('Execution timeout. Please try again.');
+    }
+    
+    } catch (error) {
+      setOutput(`Error: ${error.message}`);
+    } finally {
+      setIsRunning(false);
+    }
   }
   return (
-    <div className='mainWrap' style={{ gridTemplateColumns: menuOpen ? `${editorOpen ? '230px 1fr 0.4fr' : '230px 1fr'}` : `${editorOpen ? '0 1fr 0.4fr' : '0 1fr'}` }}>
+    <div className='mainWrap' style={{ gridTemplateColumns: menuOpen ? `${showTerminal ? '230px 1fr 0.4fr' : '230px 1fr'}` : `${showTerminal ? '0 1fr 0.4fr' : '0 1fr'}` }}>
       <div className="aside" style={{ position: 'relative' }}>
         <div className='menu-options' style={{ left: menuOpen ? '230px' : '0px' }} onClick={() => setMenuOpen(!menuOpen)}><AiOutlineMenu /></div>
         <div className="asideInner">
@@ -211,6 +276,7 @@ function EditorPage() {
             <option value="52">C++</option>
             <option value="49">C</option>
             <option value="63">Javascript</option>
+            <option value="62">Java</option>
             <option value="92">Python</option>
           </select>
         }
@@ -220,14 +286,19 @@ function EditorPage() {
       <div className="editorWrap">
         <Editor socketRef={socketRef} id={id} setLiveCode={setLiveCode} access={access} editorRef={editorRef} />
       </div>
-      <div className='terminal'>
-       {editorOpen && <Terminal output={output} terminal={terminal} setEditorOpen={setEditorOpen} setInput={setInput} input={input} />}
-      </div>
+      {showTerminal && (
+        <div className='terminal'>
+          <Terminal output={output} terminal={terminal} setEditorOpen={setShowTerminal} setInput={setInput} input={input} />
+        </div>
+      )}
       {
         (clients.length !== 0 && clients[0].username === location.state.username && <button className='btn doubtBtn' style={{ right: '300px' }} onClick={lockAccess} >{access ? 'Lock' : 'Unlock'} Editor</button>)
       }
       <button className='btn doubtBtn' style={{ right: '220px', backgroundColor: isRunning ? '#ccc' : '#4aed88' }} onClick={runCode} disabled={isRunning}>
         {isRunning ? 'Running...' : 'Run Code'}
+      </button>
+      <button className='btn doubtBtn' style={{ right: '60px', backgroundColor: isMicEnabled ? '#4aed88' : '#ff4444' }} onClick={toggleMicrophone}>
+        {isMicEnabled ? '🎤 ON' : '🎤 OFF'}
       </button>
       <button className='btn doubtBtn' style={{ right: '140px' }} onClick={downloadTxtFile}>Download Code</button>
       <button className='btn doubtBtn' onClick={handleChat}>Ask a doubt? </button>
