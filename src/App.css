@@ -1,0 +1,11 @@
+@@ .. @@
+ .doubtBtn:hover{
+   background: #dea879;
+ }
++
++.doubtBtn:disabled {
++  background: #ccc !important;
++  cursor: not-allowed;
++}
++
+ .chatSection{
