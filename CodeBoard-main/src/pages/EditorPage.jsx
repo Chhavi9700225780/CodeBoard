@@ -29,6 +29,9 @@ function EditorPage() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [input, setInput] = useState("");
   const [langCode, setLangCode] = useState("52");
+  const [isRunning, setIsRunning] = useState(false);
+  const [isMicEnabled, setIsMicEnabled] = useState(false);
+  const [mediaStream, setMediaStream] = useState(null);
   const handleChat = (e) => {
     e.preventDefault();
     setChatShown(true);
@@ -41,9 +44,16 @@ function EditorPage() {
       socketRef.current = await initSocket();
       socketRef.current.on('connect_error', (err) => handleerror(err));
       socketRef.current.on('connect_failed', (err) => handleerror(err));
+      socketRef.current.on('disconnect', (reason) => {
+        if (reason === 'io server disconnect') {
+          toast.error('Server disconnected. Attempting to reconnect...');
+        }
+      });
+      socketRef.current.on('reconnect', () => {
+        toast.success('Reconnected to server!');
+      });
       function handleerror(err) {
-        toast.error('Socket connection failed, try again!')
-        navigate('/');
+        toast.error('Connection issue. Retrying...');
       }
       socketRef.current.emit(ACTIONS.JOIN, {
         id,
