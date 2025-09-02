@@ -226,7 +226,9 @@ function EditorPage() {
       {
         (clients.length !== 0 && clients[0].username === location.state.username && <button className='btn doubtBtn' style={{ right: '300px' }} onClick={lockAccess} >{access ? 'Lock' : 'Unlock'} Editor</button>)
       }
-      {/* <button className='btn doubtBtn' style={{ right: '300px' }} onClick={() => runCode()} >Run Code</button> */}
+      <button className='btn doubtBtn' style={{ right: '220px', backgroundColor: isRunning ? '#ccc' : '#4aed88' }} onClick={runCode} disabled={isRunning}>
+        {isRunning ? 'Running...' : 'Run Code'}
+      </button>
       <button className='btn doubtBtn' style={{ right: '140px' }} onClick={downloadTxtFile}>Download Code</button>
       <button className='btn doubtBtn' onClick={handleChat}>Ask a doubt? </button>
       {isChatShown && <DoubtSection status={setChatShown} setDoubt={setDoubt} doubt={doubt} askDoubt={askDoubt} allDoubts={allDoubts} />}
